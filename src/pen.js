@@ -53,7 +53,7 @@
       textarea: '<textarea name="content"></textarea>',
       list: [
         'blockquote', 'h2', 'h3', 'p', 'insertorderedlist', 'insertunorderedlist', 'inserthorizontalrule',
-        'indent', 'outdent', 'bold', 'italic', 'underline', 'createlink'
+        'indent', 'outdent', 'bold', 'italic', 'underline', 'createlink', 'insertimage'
       ]
     };
 
@@ -136,10 +136,17 @@
 
     var that = this, icons = '';
 
+    var createInput = false;
     for(var i = 0, list = this.config.list; i < list.length; i++) {
       var name = list[i], klass = 'pen-icon icon-' + name;
       icons += '<i class="' + klass + '" data-action="' + name + '">' + (name.match(/^h[1-6]|p$/i) ? name.toUpperCase() : '') + '</i>';
-      if((name === 'createlink')) icons += '<input class="pen-input" placeholder="http://" />';
+      if((name === 'createlink' || name === 'insertimage')) {
+        createInput = true;
+      }
+    }
+
+    if (createInput){
+      icons += '<input class="pen-input" placeholder="http://" />';
     }
 
     var menu = doc.createElement('div');
@@ -216,6 +223,27 @@
         return input.onkeypress;
       }
 
+      // insert image
+      if(action === 'insertimage') {
+        var input = menu.getElementsByTagName('input')[0], insertimage;
+
+        input.style.display = 'block';
+        input.focus();
+
+        insertimage = function(input) {
+          input.style.display = 'none';
+          if(input.value) return apply(input.value.replace(/(^\s+)|(\s+$)/g, '').replace(/^(?!http:\/\/|https:\/\/)(.*)$/, 'http://$1'));
+          action = 'unlink';
+          apply();
+        };
+
+        input.onkeypress = function(e) {
+          if(e.which === 13) return insertimage(e.target);
+        };
+
+        return input.onkeypress;
+      }
+
       apply();
     });
 
@@ -278,8 +306,9 @@
     reg = {
       block: /^(?:p|h[1-6]|blockquote|pre)$/,
       inline: /^(?:bold|italic|underline|insertorderedlist|insertunorderedlist|indent|outdent)$/,
-      source: /^(?:insertimage|createlink|unlink)$/,
-      insert: /^(?:inserthorizontalrule|insert)$/
+      source: /^(?:createlink|unlink)$/,
+      insert: /^(?:inserthorizontalrule|insert)$/,
+      insertimage: /^(?:insertimage)$/,
     };
 
     overall = function(cmd, val) {
@@ -312,6 +341,22 @@
       return overall('formatblock', name);
     };
 
+    insertimage = function(name, val){
+      var range = that._sel.getRangeAt(0)
+        , node = range.startContainer;
+
+      var img = document.createElement("img");
+      img.src = val;
+      range.insertNode(img);
+
+      range.selectNode(node);
+      range.collapse(false);
+
+      // trigger onInput
+      document.execCommand('insertHorizontalRule', false, null);
+      document.execCommand('undo', false, null);
+    }
+
     this._actions = function(name, value) {
       if(name.match(reg.block)) {
         block(name);
@@ -319,6 +364,8 @@
         overall(name, value);
       } else if(name.match(reg.insert)) {
         insert(name);
+      } else if(name.match(reg.insertimage)) {
+        insertimage(name, value);
       } else {
         if(this.config.debug) utils.log('can not find command function for name: ' + name + (value ? (', value: ' + value) : ''));
       }
